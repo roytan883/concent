@@ -1,10 +1,6 @@
+/** eslint-disabled */
 import { START } from '../../support/priv-constant';
 import makeObState from '../state/make-ob-state';
-import ccContext from '../../cc-context';
-
-const {
-  store: { getState },
-} = ccContext;
 
 export default function (ref) {
   const ctx = ref.ctx;

@@ -109,7 +109,33 @@ export type ComputedValType<T> = {
   );
 }
 
-export type SettingsType<SetupFn extends (...args: any) => any> = ReturnType<SetupFn> extends void ? {} : ReturnType<SetupFn>;
+export type SettingsType<SetupFn> = SetupFn extends IAnyFn ?
+  (ReturnType<SetupFn> extends void ? {} : ReturnType<SetupFn>) :
+  {};
+
+/**
+ * inspired by
+ * https://github.com/pirix-gh/ts-toolbelt/blob/master/src/List/Tail.ts
+ */
+type C2List<A = any> = ReadonlyArray<A>;
+type Tail<L extends C2List> =
+  ((...t: L) => any) extends ((head: any, ...tail: infer LTail) => any)
+  ? LTail
+  : never
+type GetRestItemsType<A extends Array<any>> = Exclude<A, A[0]>;
+// where set bindCtxToMethod as true, user should use SettingsCType to infer ctx.settings type
+export type SettingsCType<SetupFn, Ctx extends ICtxBase = ICtxBase> =
+  SetupFn extends IAnyFn ? (
+    ReturnType<SetupFn> extends IAnyObj ? (
+      { [key in keyof ReturnType<SetupFn>]:
+        (
+          ReturnType<SetupFn>[key] extends IAnyFn ?
+          (...p: GetRestItemsType<Tail<Parameters<ReturnType<SetupFn>[key]>>>) => ReturnType<ReturnType<SetupFn>[key]> :
+          ReturnType<SetupFn>[key]
+        )
+      }
+    ) : {}
+  ) : {};
 
 export type StateType<S> = S extends IAnyFn ? ReturnType<IAnyFn> : S;
 
@@ -251,30 +277,32 @@ type MyReturnType<F extends (...args) => any> = ReturnType<F> extends Promise<in
     type PayloadType<FnName extends string> = (Parameters<reducerFnType<FnName>>)[0];
     type reducerFnResultType<FnName extends string> = ReturnType<reducerFnType<FnName>>;
  */
-declare function refCtxDispatch<Fn extends IReducerFn>
-  (type: string, payload: (Parameters<Fn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<Fn>>;
+type RenderKeyOrOpts = string | IDispatchOptions;
 declare function refCtxDispatch<RdFn extends IReducerFn>
-  (type: RdFn, payload: (Parameters<RdFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<RdFn>>;
+  (type: string, payload?: (Parameters<RdFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<RdFn>>;
+declare function refCtxDispatch<RdFn extends IReducerFn>
+  (type: RdFn, payload?: (Parameters<RdFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<RdFn>>;
 declare function refCtxDispatch<RdFn extends IReducerFn, FullState extends IAnyObj = {}>
-  (type: { module?: string, fn: RdFn, cb?: (state: FullState) => void }, payload: (Parameters<RdFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<RdFn>>;
+  (type: { module?: string, fn: RdFn, cb?: (state: FullState) => void }, payload?: (Parameters<RdFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<RdFn>>;
 declare function refCtxDispatch<RdFn extends IReducerFn>
-  (type: [string, RdFn], payload: (Parameters<RdFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<RdFn>>;
+  (type: [string, RdFn], payload?: (Parameters<RdFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<RdFn>>;
 
 declare function refCtxInvoke<UserFn extends IReducerFn>
-  (fn: UserFn, payload: (Parameters<UserFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<UserFn>>;
+  (fn: UserFn, payload?: (Parameters<UserFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<UserFn>>;
 declare function refCtxInvoke<UserFn extends IReducerFn>
-  (fn: UserFn, payload: (Parameters<UserFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<UserFn>>;
+  (fn: UserFn, payload?: (Parameters<UserFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<UserFn>>;
 declare function refCtxInvoke<UserFn extends IReducerFn>
-  (fn: { module: string, fn: UserFn }, payload: (Parameters<UserFn>)[0], renderKey?: string, delay?: number): Promise<GetPromiseT<UserFn>>;
+  (fn: { module: string, fn: UserFn }, payload?: (Parameters<UserFn>)[0], renderKey?: RenderKeyOrOpts, delay?: number): Promise<GetPromiseT<UserFn>>;
 
-declare function refCtxSetState<FullState = {}>(state: Partial<FullState>, cb?: (newFullState: FullState) => void, renderKey?: string, delay?: number): void;
-declare function refCtxSetState<FullState = {}>(moduleName: string, state: Partial<FullState>, cb?: (newFullState: FullState) => void, renderKey?: string, delay?: number): void;
+declare function refCtxSetState<FullState = {}>(state: Partial<FullState>, cb?: (newFullState: FullState) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
+declare function refCtxSetState<FullState = {}>(moduleName: string, state: Partial<FullState>, cb?: (newFullState: FullState) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
 
-declare function refCtxForceUpdate<FullState = {}>(cb?: (newFullState: FullState) => void, renderKey?: string, delay?: number): void;
+declare function refCtxForceUpdate<FullState = {}>(cb?: (newFullState: FullState) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
 
-declare function refCtxSetGlobalState<GlobalState = {}>(state: Partial<GlobalState>, cb?: (newFullState: GlobalState) => void, renderKey?: string, delay?: number): void;
+declare function refCtxSetGlobalState<GlobalState = {}>(state: Partial<GlobalState>, cb?: (newFullState: GlobalState) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
 
-declare function refCtxSetModuleState<RootState, T extends keyof RootState>(moduleName: T, state: Partial<RootState[T]>, cb?: (newFullState: RootState[T]) => void, renderKey?: string, delay?: number): void;
+declare function refCtxSetModuleState(moduleName: string, state: IAnyObj, cb?: (newFullState: IAnyObj) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
+declare function refCtxSetModuleState<RootState, T extends keyof RootState>(moduleName: T, state: Partial<RootState[T]>, cb?: (newFullState: RootState[T]) => void, renderKey?: RenderKeyOrOpts, delay?: number): void;
 
 declare function refCtxGetConnectWatchedKeys(): { [key: string]: string[] };
 declare function refCtxGetConnectWatchedKeys(module: string): string[];
@@ -305,8 +333,8 @@ declare function refCtxComputed<RefFullState, CuRet = any, F extends IFnCtxBase 
 // !!! 写成  <IFnCtx extends IFnCtxBase, FnReturnType, ValType>(oldVal: ValType, newVal: ValType, fnCtx: IFnCtxBase) => FnReturnType 暂时无法约束值类型和返回类型
 // 先写为如下方式
 type MultiComputed = {
-  [retKey: string]: ((oldVal: any, newVal: any, fnCtx: IFnCtxBase) => any) | {
-    fn: (oldVal: any, newVal: any, fnCtx: IFnCtxBase) => any,
+  [retKey: string]: ((oldVal: any, newVal: any, fnCtx: _IFnCtx) => any) | {
+    fn: (oldVal: any, newVal: any, fnCtx: _IFnCtx) => any,
     depKeys?: DepKeys,
     compare?: boolean,
     sort?: number,
@@ -336,8 +364,8 @@ declare function refCtxWatch<RefFullState, F extends IFnCtxBase = IFnCtxBase>
 // !!! 写成  <FnCtx extends IFnCtxBase, ValType>(oldVal: ValType, newVal: ValType, fnCtx: FnCtx) => VorB 暂时无法约束值类型
 // 先写为如下方式
 type MultiWatch = {
-  [retKey: string]: ((oldVal: any, newVal: any, fnCtx: IFnCtxBase) => VorB) | {
-    fn: (oldVal: any, newVal: any, fnCtx: IFnCtxBase) => VorB,
+  [retKey: string]: ((oldVal: any, newVal: any, fnCtx: _IFnCtx) => VorB) | {
+    fn: (oldVal: any, newVal: any, fnCtx: _IFnCtx) => VorB,
     depKeys?: DepKeys,
     compare?: boolean,
     immediate?: boolean,
@@ -571,10 +599,10 @@ export interface ICtx
   readonly refComputed: RefComputed;
   readonly mapped: Mapped;
   // overwrite connectedState , connectedComputed
-  readonly connectedState: Pick<RootState, ConnectedModules>;
-  readonly connectedReducer: Pick<RootReducer, ConnectedModules>;
-  readonly cr: Pick<RootReducer, ConnectedModules>;// alias of connectedReducer
-  readonly connectedComputed: Pick<RootCu, ConnectedModules>;
+  readonly connectedState: Pick<RootState, ConnectedModules | MODULE_GLOBAL >;
+  readonly connectedReducer: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL >;
+  readonly cr: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL >;// alias of connectedReducer
+  readonly connectedComputed: Pick<RootCu, ConnectedModules| MODULE_GLOBAL >;
 
   // !!! 目前这样写有问题，例如连接是foo,bar, 
   // 外面推导出的是 Pick<RootReducer, "foo"> | Pick<RootReducer, "bar">
@@ -624,8 +652,9 @@ export interface ICtxDefault
 type GetFnCtxCommit<ModuleState> = <PS extends Partial<ModuleState>>(partialState: PS) => void;
 type GetFnCtxCommitCu<ModuleComputed> = <PC extends Partial<ModuleComputed>>(partialComputed: PC) => void;
 
+
 // to constrain IFnCtx interface series shape
-export interface IFnCtxBase {
+interface _IFnCtx {// 方便 ctx.computed({....}) 定义计算描述体时，可以正确赋值fnCtx类型
   retKey: string;
   isFirstCall: boolean;
   setted: string[];
@@ -635,9 +664,12 @@ export interface IFnCtxBase {
   oldState: any;
   committedState: IAnyObj;
   cuVal: any;
-  refCtx: ICtxBase;
+  refCtx: any;
   commit: GetFnCtxCommit<any>;
   commitCu: GetFnCtxCommitCu<any>;
+}
+export interface IFnCtxBase extends _IFnCtx {
+  refCtx: ICtxBase;
 }
 // M, means need module associate generic type
 export interface IFnCtx<RefCtx extends ICtxBase = ICtxBase, FullState = {}, Computed = {}> extends IFnCtxBase {
@@ -673,6 +705,7 @@ interface IRegBase<P extends IAnyObj, ICtx extends ICtxBase> {
   lite?: 1 | 2 | 3 | 4;
   layoutEffect?: boolean;// work for useConcent only
   isPropsProxy?: boolean;// work for register only, default false
+  bindCtxToMethod?: boolean;// default false
   isSingle?: boolean; //default false
   renderKeyClasses?: string[];
   compareProps?: boolean;//default true
@@ -778,6 +811,7 @@ type ModuleConfig = {
     [retKey: string]: WatchFn | WatchFnDesc;
   };
   init?: (() => Partial<IAnyObj>) | (() => Promise<Partial<IAnyObj>>);
+  initPost?: (dispatch: IDispatch, moduleState: any) => any;
 }
 
 interface StoreConfig {
@@ -832,8 +866,7 @@ interface RunOptions {
   isHot?: boolean;// default is false
   isStrict?: boolean;
   errorHandler?: (err: Error) => void;
-  reducer?: IAnyFnInObj;// deprecated
-  bindCtxToMethod?: boolean;
+  bindCtxToMethod?: boolean;// default false
   /**
    * objectValueCompare is false by default.
    * in this situation concent treat object value as new value when user set it
@@ -1142,7 +1175,11 @@ interface IDispatchExtra {
   throwError?: boolean;
   refModule?: string;
 }
-export function dispatch<T>(type: string | TypeDesc, payload?: any, renderKey?: string | IDispatchOptions, delay?: number, extra?: IDispatchExtra): Promise<T>;
+
+declare function ccDispatch<T>(type: string | TypeDesc, payload?: any, renderKey?: string | IDispatchOptions, delay?: number, extra?: IDispatchExtra): Promise<T>;
+export type IDispatch = typeof ccDispatch;
+
+export declare const dispatch: IDispatch;
 
 export declare const emit: typeof refCtxEmit;
 
@@ -1160,16 +1197,16 @@ type DefOptions = { depKeys?: DepKeys, compare?: boolean, lazy?: boolean, sort?:
 export function defComputedVal<CuRet>(ret: CuRet): IComputedFnDesc<GetComputedFn<CuRet>>;
 
 export function defComputed<V extends IAnyObj, CuRet, F extends IFnCtxBase = IFnCtxBase>
-  (fn: (newState: V, oldState: V, fnCtx: F) => CuRet, defOptions: DepKeys | DefOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
+  (fn: (newState: V, oldState: V, fnCtx: F) => CuRet, defOptions?: DepKeys | DefOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
 export function defComputed<CuRet>
-  (fn: (newState: IAnyObj, oldState: IAnyObj, fnCtx: IFnCtxBase) => CuRet, defOptions: DepKeys | DefOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
+  (fn: (newState: IAnyObj, oldState: IAnyObj, fnCtx: IFnCtxBase) => CuRet, defOptions?: DepKeys | DefOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
 
 type DefLazyOptions = { depKeys?: DepKeys, compare?: boolean, sort?: number, retKeyDep?: boolean };
 
 export function defLazyComputed<V extends IAnyObj, CuRet, F extends IFnCtxBase = IFnCtxBase>
-  (fn: (newState: V, oldState: V, fnCtx: F) => CuRet, defOptions: DepKeys | DefLazyOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
+  (fn: (newState: V, oldState: V, fnCtx: F) => CuRet, defOptions?: DepKeys | DefLazyOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
 export function defLazyComputed<CuRet>
-  (fn: (newState: IAnyObj, oldState: IAnyObj, fnCtx: IFnCtxBase) => CuRet, defOptions: DepKeys | DefLazyOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
+  (fn: (newState: IAnyObj, oldState: IAnyObj, fnCtx: IFnCtxBase) => CuRet, defOptions?: DepKeys | DefLazyOptions): IComputedFnDesc<GetComputedFn<CuRet>>;
 
 type DefWatchOptions = { depKeys?: DepKeys, compare?: boolean, immediate?: boolean, sort?: number, retKeyDep?: boolean };
 
@@ -1236,7 +1273,7 @@ declare type DefaultExport = {
   defComputed: typeof defComputed,
   defLazyComputed: typeof defLazyComputed,
   defComputedVal: typeof defComputedVal,
-  defWatch: typeof defWatch,
+  defWatch: IDispatch,
   cst: typeof cst,
   CcFragment: typeof CcFragment,
   Ob: typeof Ob,
