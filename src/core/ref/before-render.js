@@ -1,6 +1,9 @@
-/** eslint-disabled */
+/** eslint-disable */
 import { START } from '../../support/priv-constant';
 import makeObState from '../state/make-ob-state';
+import ccContext from '../../cc-context/index';
+
+const { store } = ccContext;
 
 export default function (ref) {
   const ctx = ref.ctx;
@@ -9,13 +12,19 @@ export default function (ref) {
   // 处于收集观察依赖
   if (ctx.__$$autoWatch) {
     if (ctx.__$$hasModuleState) {
-      //每次渲染前都将最新的模块state合进来, 防止render期间读取已过期状态, 此处使用mstate，避免触发get
-      Object.assign(ref.state, ctx.mstate);
+      const { __$$prevModuleVer, module: refModule } = ctx;
+      const moduleVer = store.getModuleVer(refModule);
+      if (__$$prevModuleVer[refModule] !== moduleVer) {
+        __$$prevModuleVer[refModule] = moduleVer;
+        Object.assign(ctx.unProxyState, ctx.mstate);
+      }
+
+      // 一直使用ref.state生成新的ref.state，相当于一直使用proxy对象生成proxy对象，会触发Maximum call问题
+      // ref.state = makeObState(ref, ref.state, refModule, true);
 
       // 每次生成的state都是一个新对象，让effect逻辑里prevState curState对比能够成立
-      ref.state = makeObState(ref, ref.state, ctx.module, true);
+      ref.state = makeObState(ref, ctx.unProxyState, refModule, true);
       ctx.state = ref.state;
-      // ctx.moduleState = makeObState(ref, ctx.mstate, ctx.module, true);
 
       ctx.__$$curWaKeys = {};
       ctx.__$$compareWaKeys = ctx.__$$nextCompareWaKeys;
@@ -41,4 +50,5 @@ export default function (ref) {
     });
   }
 
+  ctx.renderCount += 1;
 }

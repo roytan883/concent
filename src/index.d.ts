@@ -28,7 +28,6 @@ type CcCst = {
   CC_PREFIX: '$$Cc';
 
   CC_DISPATCHER: '$$Dispatcher';
-  CC_DISPATCHER_BOX: '__cc_dispatcher_container_designed_by_zzk_qq_is_624313307__';
 
   CCSYNC_KEY: typeof Symbol;
 
@@ -156,7 +155,7 @@ export type ReducerType<T extends IAnyObj> = T['setState'] extends Function ? {
   readonly [K in keyof T]: ReducerMethod<T, K>;
 } : {
   readonly [K in keyof T]: ReducerMethod<T, K>;
-} & { setState: ReducerMethod<{ setState: (payload: IAnyObj, renderKeyOrOptions?: string | IDispatchOptions, delay?: number) => any }, 'setState'> }
+} & { setState: <P = IAnyObj>(payload: P, renderKeyOrOptions?: string | IDispatchOptions, delay?: number) => Promise<P> }
 
 export interface EvMapBase {
   [key: string]: any[];
@@ -407,8 +406,8 @@ declare function asCb<Val, ModuleState, RefState, RefCtx extends ICtxBase = ICtx
  * use this interface to match ctx type that component only defined belong-module
  * 
  * concent will build ctx for every instance
- * for class get get like this: this.ctx
- * for function get get like this: const ctx = useConcent('foo');
+ * get ctx in class : this.ctx
+ * get ctx in function : const ctx = useConcent('foo');
  */
 export interface ICtxBase {
   readonly module: PropKey;
@@ -599,10 +598,10 @@ export interface ICtx
   readonly refComputed: RefComputed;
   readonly mapped: Mapped;
   // overwrite connectedState , connectedComputed
-  readonly connectedState: Pick<RootState, ConnectedModules | MODULE_GLOBAL >;
-  readonly connectedReducer: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL >;
-  readonly cr: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL >;// alias of connectedReducer
-  readonly connectedComputed: Pick<RootCu, ConnectedModules| MODULE_GLOBAL >;
+  readonly connectedState: Pick<RootState, ConnectedModules | MODULE_GLOBAL>;
+  readonly connectedReducer: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL>;
+  readonly cr: Pick<RootReducer, ConnectedModules | MODULE_GLOBAL>;// alias of connectedReducer
+  readonly connectedComputed: Pick<RootCu, ConnectedModules | MODULE_GLOBAL>;
 
   // !!! 目前这样写有问题，例如连接是foo,bar, 
   // 外面推导出的是 Pick<RootReducer, "foo"> | Pick<RootReducer, "bar">
@@ -663,6 +662,7 @@ interface _IFnCtx {// 方便 ctx.computed({....}) 定义计算描述体时，可
   refModule: string;
   oldState: any;
   committedState: IAnyObj;
+  deltaCommittedState: IAnyObj;
   cuVal: any;
   refCtx: any;
   commit: GetFnCtxCommit<any>;
@@ -867,7 +867,15 @@ interface RunOptions {
   isStrict?: boolean;
   errorHandler?: (err: Error) => void;
   bindCtxToMethod?: boolean;// default false
+  computedCompare?: boolean;// default is true
+  watchCompare?: boolean;// default is true
+  watchImmediate?: boolean;// default is false
+  reComputed?: boolean;// default is true
+  extractModuleChangedState?: boolean;// default is true
+  extractRefChangedState?: boolean;// default is false
   /**
+   * when extractRefChangedState is true, objectValueCompare will effect
+   * --------------------------------------------------------------------
    * objectValueCompare is false by default.
    * in this situation concent treat object value as new value when user set it
    * 
@@ -875,15 +883,13 @@ interface RunOptions {
    * obj.foo = 'new';
    * ctx.setState({obj});// trigger re-render
    * 
-   * // but if you set objectValueCompare true, you need write immutable style to code trigger re-render
+   * // but if you set objectValueCompare true, you need write immutable style code to trigger re-render
    * ctx.setState({obj});// no trigger re-render
    * ctx.setState({obj:{...obj}});// trigger re-render
    */
   objectValueCompare?: boolean;// default is false
-  computedCompare?: boolean;// default is true
-  watchCompare?: boolean;// default is true
-  watchImmediate?: boolean;// default is false
-  reComputed?: boolean;// default is true
+  nonObjectValueCompare?: boolean;// default is true
+  localStorage?: any;// localStorage lib, in browser it will be window.localStorage by default, in rn, user should pass one
 }
 
 export interface IActionCtxBase {
@@ -1273,7 +1279,7 @@ declare type DefaultExport = {
   defComputed: typeof defComputed,
   defLazyComputed: typeof defLazyComputed,
   defComputedVal: typeof defComputedVal,
-  defWatch: IDispatch,
+  defWatch: typeof defWatch,
   cst: typeof cst,
   CcFragment: typeof CcFragment,
   Ob: typeof Ob,

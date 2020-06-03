@@ -1,3 +1,44 @@
+#### 2020-06-02
+2.6.1 发布
+fix: 重构`find-dep-fns-to-execute`，支持更复杂的链路
+> https://codesandbox.io/s/complex-cu-watch-chain-in-ref-l9nh7?file=/src/App.js
+
+#### 2020-05-27
+2.5.12 发布
+fix: `refCtx`调用`initState`丢失`privStateKeys`
+feature: 对`sync`函数提供`cachedBoundFns`支持
+
+2.5.11 发布
+fix: `beforeRender`里反复用代理对象生成代理对象，最终导致maximum call问题
+> 新增`unProxyState`解决此问题
+
+#### 2020-05-27
+2.5.1 发布
+refactor: 适配`react-native`，去`react-dom`依赖，重构`dispatcher`初始化方式
+
+#### 2020-05-15
+2.4.22 发布
+refactor: `triggerReactSetState`里当触发`RENDER_NO_OP`时，不再执行`reactCallback`
+fix: class的`setState`的第二位callback参数未能向function一样能够传递最新的state
+
+#### 2020-05-15
+2.4.21 发布
+fix: 遗漏了`ctx.initState`新的私有状态stateKey
+> 见示例 https://codesandbox.io/s/hello-concent-pzde3，<=2.4.20版本里未能正确触发watch
+
+#### 2020-05-13
+2.4.20 发布
+fix: initPost回调里模块状态不是最新结果
+
+#### 2020-05-11
+2.4.19 发布
+fix: 极端情况反复对同一个组件一直频繁渲染会触发Maximum call stack size exceeded
+> 见示例 https://codesandbox.io/s/happy-bird-rc1t7?file=/src/App.js 在2.4.18之前的确会 Maximum call stack size exceeded，2.4.19已不会
+
+#### 2020-05-03
+2.4.16 发布
+fix: globalComputed未正确收集到依赖
+
 #### 2020-04-12
 2.4.2 发布
 * 支持`useConcent`渲染期间改变参数`module`和`connect`, [在线示例](https://codesandbox.io/s/dynamic-module-and-connect-xevsp?file=/src/App.js)

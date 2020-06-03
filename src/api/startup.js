@@ -1,9 +1,7 @@
 import * as util from '../support/util';
-import { CC_DISPATCHER } from '../support/constant';
 import ccContext from '../cc-context';
-import createDispatcher from './create-dispatcher';
+import createDispatcher from '../core/base/create-dispatcher';
 import * as boot from '../core/base/boot';
-import appendDispatcher from '../core/base/append-dispatcher';
 import clearContextIfHot from './clear-context-if-hot';
 import didMount from '../core/base/did-mount';
 import beforeUnmount from '../core/base/before-unmount';
@@ -79,13 +77,16 @@ export default function (
     isDebug = false,
     errorHandler = null,
     isHot,
-    // autoCreateDispatcher = true,
     bindCtxToMethod = false,
-    objectValueCompare = false,
     computedCompare = true,
     watchCompare = true,
     watchImmediate = false,
     reComputed = true,
+    extractModuleChangedState  = true,
+    extractRefChangedState  = false,
+    objectValueCompare  = false,
+    nonObjectValueCompare  = true,
+    localStorage = null,
   } = {}) {
   try {
     throw new Error();
@@ -102,16 +103,23 @@ export default function (
       const rv = ccContext.runtimeVar;
       rv.isStrict = isStrict;
       rv.isDebug = isDebug;
-      rv.objectValueCompare = objectValueCompare;
       rv.computedCompare = computedCompare;
       rv.watchCompare = watchCompare;
       rv.watchImmediate = watchImmediate;
+      rv.extractModuleChangedState = extractModuleChangedState;
+      rv.extractRefChangedState = extractRefChangedState;
+      rv.objectValueCompare = objectValueCompare;
+      rv.nonObjectValueCompare = nonObjectValueCompare;
       rv.bindCtxToMethod = bindCtxToMethod;
 
-      if (!ccContext.refs[CC_DISPATCHER]) {
-        const Dispatcher = createDispatcher();
-        appendDispatcher(Dispatcher);
+      if (localStorage) {
+        ccContext.localStorage = localStorage;
+      } else if (window && window.localStorage) {
+        ccContext.localStorage = window.localStorage;
       }
+      ccContext.recoverRefState();
+
+      createDispatcher();
       
       boot.configModuleSingleClass(moduleSingleClass);
       boot.configStoreState(store);

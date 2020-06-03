@@ -28,7 +28,7 @@ const {
   // computed: { _computedValueOri, _computedValue },
 } = ccContext;
 
-const { okeys, makeError: me, verboseInfo: vbi, safeGetArray, safeGet, justWarning, isObjectNull } = util;
+const { okeys, makeError: me, verboseInfo: vbi, safeGetArray, safeGet, justWarning, isObjectNull, isValueNotNull } = util;
 
 let idSeq = 0;
 function getEId() {
@@ -70,7 +70,7 @@ const getConnectWatchedKeys = (ctx, module) => {
   if (module) return getWKeys(module);
   else {
     const cKeys = {};
-    connectedModules.forEach(m => cKeys[m] = getWKeys(m));
+    connectedModules.forEach(m => { cKeys[m] = getWKeys(m) });
     return cKeys;
   }
 }
@@ -86,12 +86,12 @@ function recordDep(ccUniqueKey, module, watchedKeys) {
  * liteLevel 越小，绑定的方法越少
  */
 export default function (ref, params, liteLevel = 5) {
-
   // 能省赋默认值的就省，比如state，外层调用都保证赋值过了
   let {
     isSingle, ccClassKey, ccKey = '', module, type, insType,
-    state, storedKeys = [], persistStoredKeys = false, watchedKeys, connect = {}, tag = '', ccOption = {},
+    state, storedKeys = [], persistStoredKeys = false, watchedKeys = '-', connect = {}, tag = '', ccOption = {},
   } = params;
+
   const stateModule = module;
   const existedCtx = ref.ctx;
   const isCtxNull = isObjectNull(existedCtx);// 做个保护判断，防止 ctx = {}
@@ -144,18 +144,23 @@ export default function (ref, params, liteLevel = 5) {
   // const moduleState = getState(module);
   
   const connectedComputed = {};
-  connectedModules.forEach(m => connectedComputed[m] = makeCuRefObContainer(ref, m, false));
+  connectedModules.forEach(m => { connectedComputed[m] = makeCuRefObContainer(ref, m, false) });
   const moduleComputed = makeCuRefObContainer(ref, module);
-  const globalComputed = makeCuRefObContainer(ref, MODULE_GLOBAL);
-  
-  // const globalState = getState(MODULE_GLOBAL);
+  // 所有实例都自动连接上了global模块，这里可直接取connectedComputed已做好的结果
+  const globalComputed = connectedComputed[MODULE_GLOBAL];
   const globalState = makeObState(ref, getState(MODULE_GLOBAL), MODULE_GLOBAL, false);
   // extract privStateKeys
   const privStateKeys = util.removeArrElements(okeys(state), modStateKeys);
 
-  let moduleState;
-  if (stateModule === MODULE_GLOBAL) moduleState = globalState;
-  else moduleState = makeObState(ref, mstate, module, true);
+  // 不推荐用户指定实例属于$$global模块，要不然会造成即属于又连接的情况产生
+  const moduleState = makeObState(ref, mstate, module, true);
+  if (module === MODULE_GLOBAL) {
+    //  it is not a good idea to specify a ins belong to $$global module, 
+    //  all ins connect to $$global module automatically!
+    //  recommend you visit its data by ctx.globalState or ctx.globalComputed
+    //  or you can visit by ctx.connectedState.$$global or ctx.connectComputed.$$global instead
+    util.justWarning(`belong to $$global is not good.`);
+  }
 
   // record ccClassKey
   const ccClassKeys = safeGetArray(moduleName_ccClassKeys_, module);
@@ -171,13 +176,12 @@ export default function (ref, params, liteLevel = 5) {
   const setModuleState = (module, state, reactCallback, renderKey, delay) => {
     _setState(module, state, SET_MODULE_STATE, reactCallback, renderKey, delay);
   };
-  // const setState = (state, reactCallback, renderKey, delay) => {
   const setState = (p1, p2, p3, p4, p5) => {
     if (typeof p1 === 'string') {
-      //p1 module, p2 state, p3 cb, p4 rkey, p5 delay
+      //p1: module, p2: state, p3: cb, p4: rkey, p5: delay
       setModuleState(p1, p2, p3, p4, p5);
     } else {
-      //p1 state, p2 cb, p3 rkey, p4 delay
+      //p1: state, p2: cb, p3: rkey, p4: delay
       _setState(stateModule, p1, SET_STATE, p2, p3, p4);
     }
   };
@@ -196,6 +200,7 @@ export default function (ref, params, liteLevel = 5) {
   const computedDep = {}, watchDep = {};
 
   const props = getOutProps(ref.props);
+  const now = Date.now();
   const ctx = {
     // static params
     type,
@@ -206,13 +211,13 @@ export default function (ref, params, liteLevel = 5) {
     ccKey,
     ccUniqueKey,
     renderCount: 1,
-    initTime: Date.now(),
+    initTime: now,
     watchedKeys,
     privStateKeys,
     connect,
     connectedModules,
 
-    // dynamic meta, I don't want user know these props, so put them in ctx instead of ref
+    // dynamic meta, I don't want user know these props, so let field name start with __$$
     __$$onEvents,// 当组件还未挂载时，event中心会将事件存到__$$onEvents里，当组件挂载时检查的事件列表并执行，然后清空
 
     __$$hasModuleState: modStateKeys.length > 0,
@@ -220,7 +225,7 @@ export default function (ref, params, liteLevel = 5) {
 
     __$$curWaKeys: {},
     __$$compareWaKeys: {},
-    __$$compareWaKeyCount: 0,//write before render
+    __$$compareWaKeyCount: 0,// write before render
     __$$nextCompareWaKeys: {},
     __$$nextCompareWaKeyCount: 0,
 
@@ -246,6 +251,7 @@ export default function (ref, params, liteLevel = 5) {
     prevState: mergedState,
     // state
     state: mergedState,
+    unProxyState: mergedState,// 没有proxy化的state
     moduleState,
     mstate,//用于before-render里避免merge moduleState而导致的冗余触发get
     globalState,
@@ -256,7 +262,8 @@ export default function (ref, params, liteLevel = 5) {
     // computed result containers
     refComputed: {},// 有依赖收集行为的结果容器，此时还说一个普通对象，在beforeMount时会被替换
     refComputedValue: {}, // 包裹了defineProperty后的结果容器
-    refComputedOri: {},// 原始的计算结果容器，在beforeMount时对refComputedValue包裹defineProperty时，会用refComputedOri来存储refComputedValue的值
+    // 原始的计算结果容器，在beforeMount阶段对refComputedValue包裹defineProperty时，会用refComputedOri来存储refComputedValue的值
+    refComputedOri: {},
     moduleComputed,
     globalComputed,
     connectedComputed,
@@ -294,6 +301,8 @@ export default function (ref, params, liteLevel = 5) {
     __$$ccForceUpdate: hf.makeCcForceUpdateHandler(ref),
     __$$settedList: [],//[{module:string, keys:string[]}, ...]
     __$$prevMoStateVer: {},
+    __$$prevModuleVer: {},
+    __$$cuOrWaCalled: false,
   };
 
   ref.setState = setState;
@@ -303,13 +312,20 @@ export default function (ref, params, liteLevel = 5) {
   ctx.initState = (initState) => {
     // 已挂载则不让用户在调用initState
     if (ref.__$$isMounted) {
-      return justWarning(`ctx.initState can only been called before first render period!`);
+      return justWarning(`initState can only been called before first render period!`);
     }
     if (!util.isPJO(state)) {
       return justWarning(`state ${NOT_A_JSON}`);
     }
-    ref.state = Object.assign({}, state, initState, refStoredState, moduleState);
-    ctx.prevState = ctx.state = ref.state;
+    if (ctx.__$$cuOrWaCalled) {
+      return justWarning(`initState must been called before computed or watch`);
+    }
+    const newRefState = Object.assign({}, state, initState, refStoredState, mstate);
+    // 更新stateKeys，防止遗漏新的私有stateKey
+    ctx.stateKeys = okeys(newRefState);
+    ctx.privStateKeys = util.removeArrElements(okeys(newRefState), modStateKeys);
+
+    ctx.unProxyState = ctx.prevState = ctx.state = ref.state = newRefState;
   }
 
   // 创建dispatch需要ref.ctx里的ccClassKey相关信息, 所以这里放在ref.ctx赋值之后在调用makeDispatchHandler
@@ -334,9 +350,25 @@ export default function (ref, params, liteLevel = 5) {
   }
 
   if (liteLevel > 2) {// level 3, assign async api
+    const cachedBoundFns = {};
+
     const doSync = (e, val, rkey, delay, type) => {
-      if (typeof e === 'string') return __sync.bind(null, { [CCSYNC_KEY]: e, type, val, delay, rkey }, ref);
-      __sync({ type: 'val' }, ref, e);//allow <input data-ccsync="foo/f1" onChange={ctx.sync} />
+      if (typeof e === 'string') {
+        const valType = typeof val;
+        if (isValueNotNull(val) && (valType === 'object' || valType === 'function')) {
+          return __sync.bind(null, { [CCSYNC_KEY]: e, type, val, delay, rkey }, ref);
+        } else {
+          const key = `${e}|${val}|${rkey}|${delay}`;
+          let boundFn = cachedBoundFns[key];
+          if (!boundFn) {
+            boundFn = cachedBoundFns[key] = __sync.bind(null, { [CCSYNC_KEY]: e, type, val, delay, rkey }, ref);
+          }
+          return boundFn;
+        }
+      }
+
+      // case: <input data-ccsync="foo/f1" onChange={ctx.sync} />
+      __sync({ type: 'val' }, ref, e);
     }
 
     ctx.sync = (e, val, rkey = '', delay = -1) => doSync(e, val, rkey, delay, 'val');
@@ -358,13 +390,12 @@ export default function (ref, params, liteLevel = 5) {
     };
     // 默认off掉当前实例对某个事件名的所有监听
     ctx.off = (event, { module, ccClassKey, ccUniqueKey: inputCcUkey = ccUniqueKey } = {}) => {
-      //这里刻意不为identity赋默认值，如果是undefined，表示off掉所有监听
+      // 这里刻意不为identity赋默认值，如果是undefined，表示off掉所有监听
       const { name, identity } = ev.getEventItem(event);
       ev.findEventHandlersToOff(name, { module, ccClassKey, ccUniqueKey: inputCcUkey, identity });
     }
     ctx.on = (inputEvent, handler) => {
-      //这里刻意赋默认值identity = null，表示on的是不带id认证的监听
-      const { name: event, identity = null } = ev.getEventItem(inputEvent);
+      const { name: event, identity } = ev.getEventItem(inputEvent);
       ev.bindEventHandlerToCcContext(stateModule, ccClassKey, ccUniqueKey, event, identity, handler);
     };
   }
@@ -430,8 +461,8 @@ export default function (ref, params, liteLevel = 5) {
   }
 
   let __$$autoWatch = false;
-  //向实例的reducer里绑定方法，key:{module} value:{reducerFn}
-  //为了性能考虑，只绑定所属的模块和已连接的模块的reducer方法
+  // 向实例的reducer里绑定方法，key:{module} value:{reducerFn}
+  // 为了性能考虑，只绑定所属的模块和已连接的模块的reducer方法
   allModules.forEach(m => {
     let reducerObj;
     if (m === module) {

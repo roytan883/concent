@@ -1,7 +1,7 @@
 // import hoistNonReactStatic from 'hoist-non-react-statics';
 import {
   MODULE_GLOBAL, ERR, 
-  SIG_FN_START, SIG_FN_END, SIG_FN_ERR, SIG_STATE_CHANGED,
+  SIG_FN_START, SIG_FN_END, SIG_FN_ERR,
   DISPATCH, INVOKE, CC_HOOK,
 } from '../../support/constant';
 import ccContext from '../../cc-context';
@@ -13,10 +13,10 @@ import {
   // exitChain, getChainStateMap, 
   getAllChainStateMap, removeChainState, removeAllChainState, isChainExited, setChainIdLazy, isChainIdLazy
 } from '../chain';
-import { send, onOnce, offOnce } from '../plugin';
+import { send } from '../plugin';
 import * as checker from '../checker';
 import changeRefState from '../state/change-ref-state';
-import setState from './set-state';
+import { innerSetState } from './set-state';
 import extractStateByKeys from './extract-state-by-keys';
 
 const { verboseInfo, makeError, justWarning, isPJO, okeys } = util;
@@ -116,33 +116,24 @@ function __invoke(userLogicFn, option, payload){
 }
 
 export function makeCcSetStateHandler(ref, containerRef) {
-  return (state, cb, shouldCurrentRefUpdate) => {
+  return (state, cb) => {
     const refCtx = ref.ctx;
 
     /** start update state */
     // 和react保持immutable的思路一致，强迫用户养成习惯，总是从ctx取最新的state,
     // 注意这里赋值也是取refCtx.state取做合并，因为频繁进入此函数时，ref.state可能还不是最新的
-    // refCtx.state = newFullState;
     if (containerRef) {
-      const newFullState = Object.assign({}, refCtx.state, state);
+      const newFullState = Object.assign({}, refCtx.unProxyState, state);
       containerRef.state = newFullState;
     }
 
-    /** start update ui */
-    if (shouldCurrentRefUpdate) {
-      refCtx.renderCount += 1;
-      refCtx.reactSetState(state, cb);
-    }else{
-      Object.assign(ref.state, state);
-      refCtx.state = ref.state;
-    }
+    refCtx.reactSetState(state, cb);
   }
 }
 
 export function makeCcForceUpdateHandler(ref) {
   return (cb) => {
     const refCtx = ref.ctx;
-    refCtx.renderCount += 1;
     refCtx.reactForceUpdate(cb);
   }
 }
@@ -475,10 +466,8 @@ export function makeSetStateHandler(module, initPost) {
     };
 
     try {
-      onOnce(SIG_STATE_CHANGED, execInitPost);
-      setState(module, state);
+      innerSetState(module, state, execInitPost);
     } catch (err) {
-      offOnce(SIG_STATE_CHANGED, execInitPost);
       const moduleState = getState(module);
       if (!moduleState) {
         return justWarning(`invalid module ${module}`);
@@ -499,23 +488,28 @@ export function makeSetStateHandler(module, initPost) {
 
 export const makeRefSetState = (ref) => (partialState, cb) => {
   const ctx = ref.ctx;
+  Object.assign(ctx.unProxyState, partialState);
   const newState = Object.assign({}, ref.state, partialState);
-  
+
   if (ctx.type === CC_HOOK) {
     ref.state = ctx.state = newState;
     ctx.__boundSetState(newState);
-    if (cb) cb(newState); // 和class setState(partialState, cb); 保持一致
+    if (cb) cb(newState);
   } else {
     ctx.state = newState;
     // don't assign newState to ref.state before didMount
     // it will cause
-    // Warning: Expected CC(SomeComp) state to match memoized state before processing the update queue
+    // Warning: Expected CC(SomeComp) state to match memorized state before processing the update queue
     if (!ref.__$$isMounted) {
       Object.assign(ref.state, partialState);
     } else {
       ref.state = newState;
     }
-    ctx.__boundSetState(newState, cb);
+
+    // 此处注意原始的react class setSate [,callback] 参数，它不会提供latest state
+    ctx.__boundSetState(partialState, () => {
+      if (cb) cb(newState);
+    });
   }
 }
 

@@ -47,7 +47,7 @@ export default function (cate, confMeta, item, handler, depKeysOrOpt) {
   const type = confMeta.type;
   if (cate === CATE_REF) {
     if (!ctx.__$$inBM) {
-      justWarning(`${cate} ${type} must be been called in setup block`);
+      justWarning(`${cate} ${type} must been called in setup block`);
       return;
     }
   }
@@ -90,7 +90,6 @@ function _parseDescObj(cate, confMeta, descObj) {
     }
 
     if (isPJO(targetItem)) {
-      // depKeys设置为默认自动收集
       const { fn, immediate = watchImmediate, compare = defaultCompare, lazy, retKeyDep = true } = targetItem;
 
       // 确保用户显示的传递null、undefined、0、都置为依赖收集状态
